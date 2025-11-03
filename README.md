@@ -22,7 +22,8 @@ This repository supports the analysis of predicted gene expression changes (“D
 8. Save all scripts, results, and predictions in this repo for transparency.
 
 ## Code structure  
-- `data/` : raw and processed dataset files.  
+- `data/` : **NOTE: Data files are stored on D: drive at `D:\DEG_Prediction_PKC\data` to save SSD space**  
+  - Raw and processed dataset files are stored separately on disk D  
 - `scripts/` : analysis scripts (e.g., download, preprocess, DEG analysis, mapping to gene panel).  
 - `results/` : output tables, plots, predictions.  
 - `README.md` : this file.  
