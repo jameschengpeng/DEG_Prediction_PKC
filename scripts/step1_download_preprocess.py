@@ -79,20 +79,56 @@ def preprocess_expression_data(gse):
         sample_names.append(gsm_name)
         expr_data.append(gsm.table['VALUE'].values)
     
+    # Get probe IDs from the first sample
+    first_sample = list(gse.gsms.values())[0]
+    probe_ids = first_sample.table.index
+    
     # Create expression dataframe
     expr_df = pd.DataFrame(
         np.array(expr_data).T,
-        index=list(gse.gsms.values())[0].table.index,
+        index=probe_ids,
         columns=sample_names
     )
     
-    # Add gene symbols if available
-    if 'Gene Symbol' in platform.table.columns:
-        gene_symbols = platform.table['Gene Symbol']
-        expr_df.insert(0, 'Gene_Symbol', gene_symbols.values)
-    elif 'GENE_SYMBOL' in platform.table.columns:
-        gene_symbols = platform.table['GENE_SYMBOL']
-        expr_df.insert(0, 'Gene_Symbol', gene_symbols.values)
+    # Map probe IDs to gene symbols using platform annotation
+    gene_symbols = []
+    
+    # Check various possible column names for gene symbols in the platform
+    gene_symbol_col = None
+    possible_names = ['Symbol', 'Gene Symbol', 'GENE_SYMBOL', 'Gene_Symbol', 
+                      'ILMN_Gene', 'ORF', 'gene_assignment', 'Gene']
+    
+    for col_name in possible_names:
+        if col_name in platform.table.columns:
+            gene_symbol_col = col_name
+            logger.info(f"Found gene symbol column: {col_name}")
+            break
+    
+    if gene_symbol_col:
+        # Create a mapping from probe ID to gene symbol
+        platform.table.index = platform.table.index.astype(str)
+        probe_to_gene = platform.table[gene_symbol_col].to_dict()
+        
+        # Map each probe ID to its gene symbol
+        for probe_id in probe_ids:
+            probe_id_str = str(probe_id)
+            if probe_id_str in probe_to_gene:
+                gene_sym = str(probe_to_gene[probe_id_str])
+                # Handle multiple genes or empty values
+                if gene_sym and gene_sym != 'nan' and gene_sym != '':
+                    # Take first gene if multiple are listed (separated by ///)
+                    gene_symbols.append(gene_sym.split('///')[0].strip())
+                else:
+                    gene_symbols.append(probe_id_str)
+            else:
+                gene_symbols.append(probe_id_str)
+        
+        expr_df.insert(0, 'Gene_Symbol', gene_symbols)
+        logger.info(f"Mapped {sum([1 for g in gene_symbols if not g.isdigit()])} probes to gene symbols")
+    else:
+        logger.warning("No gene symbol column found in platform annotation")
+        logger.warning(f"Available platform columns: {list(platform.table.columns)}")
+        expr_df.insert(0, 'Gene_Symbol', probe_ids)
     
     # Create metadata dataframe
     metadata = []

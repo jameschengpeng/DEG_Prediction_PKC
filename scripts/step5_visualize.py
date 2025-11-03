@@ -48,7 +48,7 @@ def load_predictions(predictions_file):
 
 def plot_prediction_summary(predictions_df, output_file):
     """
-    Create bar plot summarizing predictions by pathway
+    Create bar plot summarizing signaling activity predictions by pathway
     
     Parameters:
     -----------
@@ -57,19 +57,30 @@ def plot_prediction_summary(predictions_df, output_file):
     output_file : str
         Output file path
     """
-    logger.info("Creating prediction summary plot...")
+    logger.info("Creating signaling prediction summary plot...")
     
-    # Count predictions by pathway and direction
+    # Count predictions by pathway and signaling change type
     summary_data = []
     
     for pathway in predictions_df['pathway'].unique():
         pathway_data = predictions_df[predictions_df['pathway'] == pathway]
         
+        # Categorize signaling changes
+        increased = pathway_data['predicted_signaling_change'].str.contains(
+            'increased|enhanced', case=False, na=False).sum()
+        decreased = pathway_data['predicted_signaling_change'].str.contains(
+            'decreased|reduced|loss', case=False, na=False).sum()
+        altered = pathway_data['predicted_signaling_change'].str.contains(
+            'altered|changed', case=False, na=False).sum()
+        no_change = (pathway_data['predicted_signaling_change'] == 'no_change').sum() + \
+                    (pathway_data['predicted_signaling_change'] == 'no_direct_change').sum()
+        
         summary_data.append({
             'Pathway': pathway,
-            'Upregulated': (pathway_data['predicted_change'] == 'up').sum(),
-            'Downregulated': (pathway_data['predicted_change'] == 'down').sum(),
-            'No Change': (pathway_data['predicted_change'] == 'no_change').sum(),
+            'Increased Activity': increased,
+            'Decreased Activity': decreased,
+            'Altered/Complex': altered,
+            'No Change': no_change,
         })
     
     summary_df = pd.DataFrame(summary_data)
@@ -82,15 +93,15 @@ def plot_prediction_summary(predictions_df, output_file):
         kind='barh',
         stacked=True,
         ax=ax,
-        color=['#d62728', '#1f77b4', '#7f7f7f'],
+        color=['#2ca02c', '#d62728', '#ff7f0e', '#7f7f7f'],
         alpha=0.8
     )
     
     ax.set_xlabel('Number of Genes', fontsize=12, fontweight='bold')
     ax.set_ylabel('Pathway', fontsize=12, fontweight='bold')
-    ax.set_title('Predicted Gene Expression Changes by Pathway\n(PKC KO in Astrocytes)',
+    ax.set_title('Predicted Protein-Level Signaling Changes by Pathway\n(PKC KO in Astrocytes)',
                  fontsize=14, fontweight='bold', pad=20)
-    ax.legend(title='Prediction', bbox_to_anchor=(1.05, 1), loc='upper left')
+    ax.legend(title='Signaling Activity', bbox_to_anchor=(1.05, 1), loc='upper left')
     ax.grid(axis='x', alpha=0.3)
     
     plt.tight_layout()
@@ -102,7 +113,7 @@ def plot_prediction_summary(predictions_df, output_file):
 
 def plot_heatmap(predictions_df, output_file):
     """
-    Create heatmap of predicted changes
+    Create heatmap of predicted signaling activity changes
     
     Parameters:
     -----------
@@ -114,13 +125,25 @@ def plot_heatmap(predictions_df, output_file):
     logger.info("Creating heatmap...")
     
     # Prepare data for heatmap
-    # Convert predictions to numeric values
-    change_map = {'up': 1, 'down': -1, 'no_change': 0, 'unknown': np.nan}
-    predictions_df['change_numeric'] = predictions_df['predicted_change'].map(change_map)
+    # Convert signaling predictions to numeric values
+    def map_signaling_change(change):
+        if pd.isna(change):
+            return 0
+        change_lower = str(change).lower()
+        if 'increased' in change_lower or 'enhanced' in change_lower:
+            return 1
+        elif 'decreased' in change_lower or 'reduced' in change_lower or 'loss' in change_lower:
+            return -1
+        elif 'altered' in change_lower or 'changed' in change_lower:
+            return 0.5  # Intermediate value for complex changes
+        else:
+            return 0
+    
+    predictions_df['signaling_numeric'] = predictions_df['predicted_signaling_change'].apply(map_signaling_change)
     
     # Create pivot table
     heatmap_data = predictions_df.pivot_table(
-        values='change_numeric',
+        values='signaling_numeric',
         index='gene',
         columns='pathway',
         aggfunc='first'
@@ -129,11 +152,11 @@ def plot_heatmap(predictions_df, output_file):
     # If pivot doesn't work well, create alternative visualization
     if heatmap_data.empty or heatmap_data.shape[1] == 0:
         # Alternative: simple heatmap with genes as rows
-        heatmap_data = predictions_df[['gene', 'change_numeric']].set_index('gene')
-        heatmap_data.columns = ['Predicted Change']
+        heatmap_data = predictions_df[['gene', 'signaling_numeric']].set_index('gene')
+        heatmap_data.columns = ['Signaling Change']
     
     # Create figure
-    fig, ax = plt.subplots(figsize=(10, max(8, len(predictions_df) * 0.3)))
+    fig, ax = plt.subplots(figsize=(12, max(10, len(predictions_df) * 0.3)))
     
     # Create heatmap
     sns.heatmap(
@@ -142,7 +165,7 @@ def plot_heatmap(predictions_df, output_file):
         center=0,
         vmin=-1,
         vmax=1,
-        cbar_kws={'label': 'Predicted Change', 'ticks': [-1, 0, 1]},
+        cbar_kws={'label': 'Signaling Activity', 'ticks': [-1, 0, 0.5, 1]},
         linewidths=0.5,
         linecolor='white',
         ax=ax,
@@ -151,9 +174,9 @@ def plot_heatmap(predictions_df, output_file):
     
     # Customize colorbar
     cbar = ax.collections[0].colorbar
-    cbar.ax.set_yticklabels(['Down', 'No Change', 'Up'])
+    cbar.ax.set_yticklabels(['Decreased', 'No Change', 'Altered', 'Increased'])
     
-    ax.set_title('Predicted Expression Changes in PKC KO Astrocytes',
+    ax.set_title('Predicted Protein-Level Signaling Activity Changes\n(PKC KO in Astrocytes)',
                  fontsize=14, fontweight='bold', pad=20)
     ax.set_xlabel('Pathway', fontsize=12, fontweight='bold')
     ax.set_ylabel('Gene', fontsize=12, fontweight='bold')
@@ -209,7 +232,7 @@ def plot_confidence_distribution(predictions_df, output_file):
 
 def plot_volcano(predictions_df, output_file):
     """
-    Create volcano plot of proxy data with gene panel highlighted
+    Create volcano plot of proxy data colored by predicted signaling changes
     
     Parameters:
     -----------
@@ -228,18 +251,23 @@ def plot_volcano(predictions_df, output_file):
         return
     
     # Create figure
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, ax = plt.subplots(figsize=(12, 8))
     
-    # Calculate -log10(p-value) if available
-    # For now, color by predicted change
-    color_map = {
-        'up': '#d62728',
-        'down': '#1f77b4',
-        'no_change': '#7f7f7f',
-        'unknown': '#bcbd22'
-    }
+    # Color by signaling change prediction
+    def get_color(signaling_change):
+        if pd.isna(signaling_change):
+            return '#7f7f7f'
+        change_lower = str(signaling_change).lower()
+        if 'increased' in change_lower or 'enhanced' in change_lower:
+            return '#2ca02c'  # Green for increased
+        elif 'decreased' in change_lower or 'reduced' in change_lower or 'loss' in change_lower:
+            return '#d62728'  # Red for decreased
+        elif 'altered' in change_lower or 'changed' in change_lower:
+            return '#ff7f0e'  # Orange for altered
+        else:
+            return '#7f7f7f'  # Gray for no change
     
-    colors = plot_data['predicted_change'].map(color_map)
+    colors = plot_data['predicted_signaling_change'].apply(get_color)
     
     # Create scatter plot
     scatter = ax.scatter(
@@ -252,9 +280,9 @@ def plot_volcano(predictions_df, output_file):
         linewidths=0.5
     )
     
-    # Add gene labels for significant changes
+    # Add gene labels for notable changes or PKC genes
     for idx, row in plot_data.iterrows():
-        if abs(row['proxy_log2fc']) > 0.5:
+        if (abs(row['proxy_log2fc']) > 0.5) or ('PKC' in str(row['gene']).upper()):
             ax.annotate(
                 row['gene'],
                 (row['proxy_log2fc'], abs(row['proxy_log2fc'])),
@@ -267,19 +295,20 @@ def plot_volcano(predictions_df, output_file):
     ax.axvline(x=0.5, color='gray', linestyle=':', linewidth=0.5, alpha=0.5)
     ax.axvline(x=-0.5, color='gray', linestyle=':', linewidth=0.5, alpha=0.5)
     
-    ax.set_xlabel('Log2 Fold Change (Proxy Data)', fontsize=12, fontweight='bold')
+    ax.set_xlabel('Log2 Fold Change (Proxy mRNA Data)', fontsize=12, fontweight='bold')
     ax.set_ylabel('|Log2 Fold Change|', fontsize=12, fontweight='bold')
-    ax.set_title('Volcano Plot: Gene Panel in Proxy PKC Inhibition Data',
+    ax.set_title('Proxy Data vs Predicted Signaling Changes\n(Gene Panel - PKC Inhibition)',
                  fontsize=14, fontweight='bold', pad=20)
     
-    # Create custom legend
+    # Create custom legend for signaling predictions
     from matplotlib.patches import Patch
     legend_elements = [
-        Patch(facecolor='#d62728', label='Predicted Up'),
-        Patch(facecolor='#1f77b4', label='Predicted Down'),
+        Patch(facecolor='#2ca02c', label='Signaling Increased'),
+        Patch(facecolor='#d62728', label='Signaling Decreased'),
+        Patch(facecolor='#ff7f0e', label='Signaling Altered'),
         Patch(facecolor='#7f7f7f', label='No Change'),
     ]
-    ax.legend(handles=legend_elements, loc='upper right')
+    ax.legend(handles=legend_elements, loc='upper right', title='Predicted Signaling')
     
     ax.grid(alpha=0.3)
     

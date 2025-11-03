@@ -32,8 +32,21 @@ GSE43217_FILE = os.path.join(RAW_DATA_DIR, 'GSE43217_series_matrix.txt')
 GSE43217_CEL_DIR = os.path.join(RAW_DATA_DIR, 'GSE43217_RAW')
 
 # Astrocyte baseline expression data
-# Update with your chosen astrocyte dataset
-ASTROCYTE_EXPRESSION_FILE = os.path.join(RAW_DATA_DIR, 'astrocyte_expression.csv')
+# Allen Brain Atlas - Gene expression by cluster (median)
+# Species selection: 'Human' or 'Mouse'
+ASTROCYTE_SPECIES = 'Human'  # Change to 'Mouse' to use mouse data
+
+# Human data (matches GSE43217 human dataset)
+ASTROCYTE_EXPRESSION_FILE_HUMAN = os.path.join(RAW_DATA_DIR, 'Human', 'gene_expression_by_cluster_median.csv')
+CLUSTER_TAXONOMY_FILE_HUMAN = os.path.join(RAW_DATA_DIR, 'Human', 'taxonomy_of_clusters.json')
+
+# Mouse data (for comparison or ortholog-based analysis)
+ASTROCYTE_EXPRESSION_FILE_MOUSE = os.path.join(RAW_DATA_DIR, 'Mouse', 'gene_expression_by_cluster_median.csv')
+CLUSTER_TAXONOMY_FILE_MOUSE = os.path.join(RAW_DATA_DIR, 'Mouse', 'taxonomy_of_clusters.json')
+
+# Active files based on species selection
+ASTROCYTE_EXPRESSION_FILE = ASTROCYTE_EXPRESSION_FILE_HUMAN if ASTROCYTE_SPECIES == 'Human' else ASTROCYTE_EXPRESSION_FILE_MOUSE
+CLUSTER_TAXONOMY_FILE = CLUSTER_TAXONOMY_FILE_HUMAN if ASTROCYTE_SPECIES == 'Human' else CLUSTER_TAXONOMY_FILE_MOUSE
 
 # Optional: Additional knockout/knockdown datasets
 OPTIONAL_KO_FILES = {

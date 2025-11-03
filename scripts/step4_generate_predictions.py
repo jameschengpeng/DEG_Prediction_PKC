@@ -1,6 +1,7 @@
 """
 Step 4: Generate Final Predictions
-Combine mechanistic reasoning with proxy data to predict PKC KO effects in astrocytes
+Predict protein-level signaling changes in PKC KO astrocytes
+Based on PKC's phosphorylation targets and signaling mechanisms
 """
 
 import os
@@ -42,10 +43,11 @@ def load_gene_panel_data(gene_panel_file):
 
 def apply_mechanistic_logic(gene_panel_df):
     """
-    Apply mechanistic reasoning to predict direction of change in astrocyte PKC KO
+    Predict protein-level signaling activity changes based on PKC's mechanistic roles
     
-    This function encodes biological knowledge about how PKC regulates
-    calcium signaling components
+    Key principle: PKC KO affects PROTEIN ACTIVITY (phosphorylation) not mRNA levels
+    - Transcriptional changes are secondary/compensatory (long-term)
+    - Immediate effects are on calcium signaling dynamics (protein function)
     
     Parameters:
     -----------
@@ -55,9 +57,9 @@ def apply_mechanistic_logic(gene_panel_df):
     Returns:
     --------
     predictions_df : pd.DataFrame
-        Predictions with mechanistic rationale
+        Predictions of protein activity/signaling changes
     """
-    logger.info("Applying mechanistic logic...")
+    logger.info("Applying mechanistic logic for protein-level signaling predictions...")
     
     predictions = []
     
@@ -68,117 +70,144 @@ def apply_mechanistic_logic(gene_panel_df):
         log2fc = row['log2_fold_change'] if 'log2_fold_change' in row else np.nan
         expressed = row.get('expressed_in_astrocytes', True)
         
-        # Initialize prediction
-        predicted_change = 'unknown'
+        # Initialize prediction for SIGNALING ACTIVITY (not mRNA)
+        predicted_signaling_change = 'unknown'
+        predicted_mrna_change = 'minimal'  # Default: no transcriptional change expected
         confidence = 'low'
         rationale = ''
         
-        # PKC isoforms themselves
-        if gene in ['PRKCA', 'PRKCB']:
-            predicted_change = 'down'
+        # ===== PKC isoforms - Direct KO targets =====
+        if gene in ['PRKCA', 'PRKCB', 'PRKCG']:
+            predicted_signaling_change = 'loss_of_function'
+            predicted_mrna_change = 'down'  # Gene knocked out
             confidence = 'high'
-            rationale = 'Direct KO target - conventional PKC isoforms removed'
+            rationale = ('Direct KO target: PKC protein absent. '
+                        'SIGNALING EFFECT: Complete loss of PKC kinase activity. '
+                        'mRNA may show compensatory upregulation in proxy data.')
         
-        # Phospholipase C - upstream of PKC, may be downregulated via feedback
-        elif pathway == 'Phospholipase C':
-            if deg_regulation == 'downregulated':
-                predicted_change = 'down'
-                confidence = 'medium'
-                rationale = 'Proxy shows downregulation; reduced PKC may decrease PLC via positive feedback'
-            elif deg_regulation == 'upregulated':
-                predicted_change = 'up'
-                confidence = 'medium'
-                rationale = 'Proxy shows upregulation; may indicate compensatory response'
-            else:
-                predicted_change = 'no_change'
-                confidence = 'low'
-                rationale = 'No significant change in proxy; effect uncertain in astrocytes'
+        elif gene in ['PRKCD', 'PRKCE', 'PRKCH', 'PRKCI', 'PRKCQ', 'PRKCZ']:
+            predicted_signaling_change = 'no_change'
+            predicted_mrna_change = 'minimal'
+            confidence = 'medium'
+            rationale = ('Non-targeted PKC isoform: Protein remains functional. '
+                        'May show compensatory activity changes but not knocked out.')
         
-        # IP3 receptors - PKC can phosphorylate and modulate IP3R
+        # ===== IP3 Receptors - PKC phosphorylation targets =====
         elif pathway == 'IP3 Receptor':
-            if deg_regulation == 'upregulated':
-                predicted_change = 'up'
-                confidence = 'medium'
-                rationale = 'Proxy shows upregulation; loss of PKC-mediated inhibition may increase IP3R'
-            elif deg_regulation == 'downregulated':
-                predicted_change = 'down'
-                confidence = 'medium'
-                rationale = 'Proxy shows downregulation; may indicate complex regulation'
-            else:
-                predicted_change = 'no_change'
-                confidence = 'low'
-                rationale = 'No change in proxy; PKC effect on IP3R may be context-dependent'
+            predicted_signaling_change = 'increased_activity'
+            predicted_mrna_change = 'minimal'
+            confidence = 'high'
+            rationale = ('PKC phosphorylates IP3R → reduces IP3R sensitivity/open probability. '
+                        'PKC KO → Loss of inhibitory phosphorylation → Enhanced IP3R activity. '
+                        'SIGNALING EFFECT: Increased Ca²⁺ release from ER stores. '
+                        'mRNA levels likely unchanged (post-translational regulation).')
         
-        # SERCA/PMCA pumps - can be regulated by PKC
-        elif pathway in ['SERCA Pump', 'PMCA Pump']:
-            if deg_regulation == 'upregulated':
-                predicted_change = 'up'
-                confidence = 'medium'
-                rationale = 'Proxy shows upregulation; loss of PKC may reduce inhibitory phosphorylation'
-            elif deg_regulation == 'downregulated':
-                predicted_change = 'down'
-                confidence = 'medium'
-                rationale = 'Proxy shows downregulation; may indicate transcriptional regulation'
-            else:
-                predicted_change = 'no_change'
-                confidence = 'low'
-                rationale = 'No change in proxy; pump regulation may be post-translational'
+        # ===== Phospholipase C - Upstream of DAG-PKC pathway =====
+        elif pathway == 'Phospholipase C':
+            predicted_signaling_change = 'potentially_increased'
+            predicted_mrna_change = 'minimal'
+            confidence = 'medium'
+            rationale = ('PLC generates DAG → activates PKC (positive feedback). '
+                        'PKC KO → Loss of positive feedback → May reduce PLC activity indirectly. '
+                        'SIGNALING EFFECT: Potentially reduced PLC-mediated IP3 production. '
+                        'However, compensation via other pathways possible.')
         
-        # Store-operated calcium entry (SOCE)
+        # ===== SERCA Pumps - PKC modulates pump activity =====
+        elif pathway == 'SERCA Pump':
+            predicted_signaling_change = 'increased_activity'
+            predicted_mrna_change = 'minimal'
+            confidence = 'medium'
+            rationale = ('PKC can phosphorylate SERCA or associated proteins (PLB) → reduces pump efficiency. '
+                        'PKC KO → Loss of inhibitory phosphorylation → Enhanced SERCA activity. '
+                        'SIGNALING EFFECT: Faster ER Ca²⁺ uptake, reduced cytosolic Ca²⁺ duration. '
+                        'mRNA levels likely unchanged.')
+        
+        # ===== PMCA Pumps - PKC phosphorylation targets =====
+        elif pathway == 'PMCA Pump':
+            predicted_signaling_change = 'altered_activity'
+            predicted_mrna_change = 'minimal'
+            confidence = 'medium'
+            rationale = ('PKC phosphorylates PMCA → can enhance or inhibit pump activity (isoform-dependent). '
+                        'PKC KO → Loss of PKC-mediated modulation → Altered PMCA regulation. '
+                        'SIGNALING EFFECT: Changed plasma membrane Ca²⁺ extrusion kinetics. '
+                        'Direction depends on specific PMCA isoform and PKC interaction.')
+        
+        # ===== SOCE (STIM1/ORAI) - PKC regulates SOCE activation =====
         elif pathway == 'SOCE':
-            if deg_regulation == 'upregulated':
-                predicted_change = 'up'
-                confidence = 'medium'
-                rationale = 'Proxy shows upregulation; may be compensatory for altered Ca2+ handling'
-            elif deg_regulation == 'downregulated':
-                predicted_change = 'down'
-                confidence = 'medium'
-                rationale = 'Proxy shows downregulation; reduced Ca2+ signaling demands'
-            else:
-                predicted_change = 'no_change'
-                confidence = 'low'
-                rationale = 'No change in proxy; SOCE may not be directly PKC-regulated'
+            predicted_signaling_change = 'potentially_increased'
+            predicted_mrna_change = 'minimal'
+            confidence = 'medium'
+            rationale = ('PKC can phosphorylate STIM1/ORAI → inhibits store-operated Ca²⁺ entry. '
+                        'PKC KO → Loss of inhibitory phosphorylation → Enhanced SOCE. '
+                        'SIGNALING EFFECT: Increased Ca²⁺ influx following ER store depletion. '
+                        'May compensate for altered internal Ca²⁺ handling.')
         
-        # Other pathways
+        # ===== Calcium Channels - PKC modulates channel activity =====
+        elif pathway == 'Calcium Channel':
+            predicted_signaling_change = 'altered_gating'
+            predicted_mrna_change = 'minimal'
+            confidence = 'low'
+            rationale = ('PKC phosphorylates various Ca²⁺ channels → modulates gating/inactivation. '
+                        'PKC KO → Loss of PKC-mediated modulation → Altered channel kinetics. '
+                        'SIGNALING EFFECT: Changed Ca²⁺ influx dynamics. '
+                        'Direction depends on specific channel type (L-type, T-type, etc.).')
+        
+        # ===== Calcium Buffers - Post-translational regulation possible =====
+        elif pathway == 'Calcium Buffer':
+            predicted_signaling_change = 'no_direct_change'
+            predicted_mrna_change = 'minimal'
+            confidence = 'low'
+            rationale = ('Ca²⁺ buffer proteins (calmodulin, calbindin) not direct PKC targets. '
+                        'SIGNALING EFFECT: Buffer capacity unchanged at protein level. '
+                        'May show secondary changes due to altered Ca²⁺ dynamics.')
+        
+        # ===== G-proteins - PKC can phosphorylate GPCRs =====
+        elif pathway == 'G-protein':
+            predicted_signaling_change = 'potentially_altered'
+            predicted_mrna_change = 'minimal'
+            confidence = 'low'
+            rationale = ('PKC phosphorylates some GPCRs → desensitization/internalization. '
+                        'PKC KO → Loss of GPCR desensitization → Potentially enhanced G-protein signaling. '
+                        'SIGNALING EFFECT: Altered receptor sensitivity to agonists.')
+        
+        # Default case
         else:
-            if deg_regulation == 'upregulated':
-                predicted_change = 'up'
-                confidence = 'low'
-                rationale = f'Proxy shows upregulation; direct PKC mechanism unclear for {pathway}'
-            elif deg_regulation == 'downregulated':
-                predicted_change = 'down'
-                confidence = 'low'
-                rationale = f'Proxy shows downregulation; direct PKC mechanism unclear for {pathway}'
-            else:
-                predicted_change = 'no_change'
-                confidence = 'low'
-                rationale = 'No change in proxy and no clear mechanistic link to PKC'
+            predicted_signaling_change = 'unknown'
+            predicted_mrna_change = 'minimal'
+            confidence = 'very_low'
+            rationale = 'Unclear mechanistic link between PKC and this pathway component.'
         
         # Adjust confidence based on astrocyte expression
         if not expressed:
             confidence = 'very_low'
-            rationale += '; Gene not highly expressed in astrocytes'
+            rationale += ' NOTE: Gene not highly expressed in astrocytes - effect may be minimal.'
         
         # Store prediction
         predictions.append({
             'gene': gene,
             'pathway': pathway,
-            'proxy_regulation': deg_regulation,
+            'predicted_signaling_change': predicted_signaling_change,
+            'predicted_mrna_change': predicted_mrna_change,
+            'proxy_mrna_regulation': deg_regulation,
             'proxy_log2fc': log2fc,
             'expressed_in_astrocytes': expressed,
-            'predicted_change': predicted_change,
             'confidence': confidence,
-            'rationale': rationale
+            'mechanistic_rationale': rationale
         })
     
     predictions_df = pd.DataFrame(predictions)
     
     # Summary statistics
-    logger.info("\nPrediction Summary:")
-    logger.info(f"  Predicted upregulated: {(predictions_df['predicted_change'] == 'up').sum()}")
-    logger.info(f"  Predicted downregulated: {(predictions_df['predicted_change'] == 'down').sum()}")
-    logger.info(f"  Predicted no change: {(predictions_df['predicted_change'] == 'no_change').sum()}")
-    logger.info(f"  Unknown: {(predictions_df['predicted_change'] == 'unknown').sum()}")
+    logger.info("\n=== PROTEIN-LEVEL SIGNALING PREDICTIONS ===")
+    logger.info("\nSignaling Activity Changes:")
+    for change_type in predictions_df['predicted_signaling_change'].unique():
+        count = (predictions_df['predicted_signaling_change'] == change_type).sum()
+        logger.info(f"  {change_type}: {count}")
+    
+    logger.info("\nmRNA Changes (transcriptional):")
+    for change_type in predictions_df['predicted_mrna_change'].unique():
+        count = (predictions_df['predicted_mrna_change'] == change_type).sum()
+        logger.info(f"  {change_type}: {count}")
     
     logger.info("\nConfidence Distribution:")
     for conf in ['high', 'medium', 'low', 'very_low']:
@@ -243,7 +272,7 @@ def save_predictions(predictions_df, output_csv, output_excel):
 
 def generate_summary_stats(predictions_df):
     """
-    Generate summary statistics for the predictions
+    Generate summary statistics for the signaling predictions
     
     Parameters:
     -----------
@@ -262,12 +291,28 @@ def generate_summary_stats(predictions_df):
     for pathway in predictions_df['pathway'].unique():
         pathway_data = predictions_df[predictions_df['pathway'] == pathway]
         
+        # Count signaling activity changes
+        increased_activity = pathway_data['predicted_signaling_change'].str.contains(
+            'increased|enhanced', case=False, na=False).sum()
+        decreased_activity = pathway_data['predicted_signaling_change'].str.contains(
+            'decreased|reduced|loss', case=False, na=False).sum()
+        altered_activity = pathway_data['predicted_signaling_change'].str.contains(
+            'altered|changed', case=False, na=False).sum()
+        no_change = (pathway_data['predicted_signaling_change'] == 'no_change').sum()
+        
+        # Count mRNA changes
+        mrna_down = (pathway_data['predicted_mrna_change'] == 'down').sum()
+        mrna_minimal = (pathway_data['predicted_mrna_change'] == 'minimal').sum()
+        
         summary_stats.append({
             'pathway': pathway,
             'total_genes': len(pathway_data),
-            'predicted_up': (pathway_data['predicted_change'] == 'up').sum(),
-            'predicted_down': (pathway_data['predicted_change'] == 'down').sum(),
-            'no_change': (pathway_data['predicted_change'] == 'no_change').sum(),
+            'signaling_increased': increased_activity,
+            'signaling_decreased': decreased_activity,
+            'signaling_altered': altered_activity,
+            'signaling_no_change': no_change,
+            'mrna_down': mrna_down,
+            'mrna_minimal': mrna_minimal,
             'high_confidence': (pathway_data['confidence'] == 'high').sum(),
             'medium_confidence': (pathway_data['confidence'] == 'medium').sum(),
             'low_confidence': (pathway_data['confidence'] == 'low').sum(),
@@ -276,7 +321,7 @@ def generate_summary_stats(predictions_df):
     summary_df = pd.DataFrame(summary_stats)
     
     # Save summary
-    summary_file = os.path.join(config.TABLES_DIR, 'prediction_summary_by_pathway.csv')
+    summary_file = os.path.join(config.TABLES_DIR, 'signaling_prediction_summary_by_pathway.csv')
     summary_df.to_csv(summary_file, index=False)
     logger.info(f"Saved summary statistics to: {summary_file}")
     
@@ -285,15 +330,20 @@ def generate_summary_stats(predictions_df):
 
 def main():
     """
-    Main function to generate final predictions
+    Main function to generate signaling-level predictions
     """
-    logger.info("Starting Step 4: Generate Final Predictions")
+    logger.info("="*60)
+    logger.info("Step 4: Protein-Level Signaling Predictions")
+    logger.info("="*60)
+    logger.info("NOTE: PKC KO primarily affects PROTEIN ACTIVITY (phosphorylation),")
+    logger.info("      not mRNA levels. Transcriptional changes are secondary/compensatory.")
+    logger.info("="*60)
     
     try:
         # Load gene panel data
         gene_panel_df = load_gene_panel_data(config.OUTPUT_FILES['gene_panel_expression'])
         
-        # Apply mechanistic logic
+        # Apply mechanistic logic for signaling predictions
         predictions_df = apply_mechanistic_logic(gene_panel_df)
         
         # Save predictions
@@ -308,7 +358,13 @@ def main():
         
         logger.info("\n" + "="*60)
         logger.info("Step 4 completed successfully!")
-        logger.info(f"Final predictions saved to:")
+        logger.info("="*60)
+        logger.info("INTERPRETATION GUIDE:")
+        logger.info("  - 'predicted_signaling_change': Protein activity/function changes")
+        logger.info("  - 'predicted_mrna_change': Expected transcriptional changes")
+        logger.info("  - Proxy mRNA data shows compensatory responses, not direct PKC effects")
+        logger.info("="*60)
+        logger.info(f"Signaling predictions saved to:")
         logger.info(f"  CSV: {config.OUTPUT_FILES['final_predictions']}")
         logger.info(f"  Excel: {config.OUTPUT_FILES['final_predictions_excel']}")
         logger.info("="*60)

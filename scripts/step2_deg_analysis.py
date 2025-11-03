@@ -69,22 +69,30 @@ def assign_groups(metadata_df):
     """
     logger.info("Assigning samples to groups...")
     
-    # TODO: Customize this based on actual metadata
-    # This is a placeholder - you'll need to inspect the metadata
-    # and modify this logic to correctly identify control vs treated samples
+    # GSE43217 samples:
+    # GSM1058791: Untreated control
+    # GSM1058792: dsRNA-treated (TLR3 stimulation)
+    # GSM1058793: PKC inhibitor (Go6976) only
+    # GSM1058794: PKC inhibitor + dsRNA
     
-    # Example logic (modify as needed):
+    # For PKC inhibition effect analysis, compare:
+    # Control: samples WITHOUT Go6976 (PKC inhibitor)
+    # Treated: samples WITH Go6976 (PKC inhibitor)
+    
     control_samples = []
     treated_samples = []
     
     for idx, row in metadata_df.iterrows():
-        sample_info = str(row['characteristics']).lower()
+        sample_id = row['sample_id']
+        title = str(row['title']).lower()
+        source = str(row['source']).lower()
         
-        # Look for keywords indicating PKC inhibition
-        if 'inhibitor' in sample_info or 'pkc' in sample_info or 'treated' in sample_info:
-            treated_samples.append(row['sample_id'])
+        # Samples with Go6976 (PKC inhibitor) are treated
+        if 'go6976' in title or 'go6976' in source or 'pkc_inhibitor' in title:
+            treated_samples.append(sample_id)
+        # Samples without Go6976 are controls
         else:
-            control_samples.append(row['sample_id'])
+            control_samples.append(sample_id)
     
     # If automatic assignment fails, prompt user to manually specify
     if len(control_samples) == 0 or len(treated_samples) == 0:
