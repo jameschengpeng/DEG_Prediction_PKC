@@ -32,5 +32,5 @@ This repository supports the analysis of predicted gene expression changes (“D
 ## Usage instructions  
 1. Clone the repository:  
    ```bash  
-   git clone https://github.com/<your-username>/astrocyte-cPKC-omics.git  
-   cd astrocyte-cPKC-omics  
+   git clone https://github.com/jameschengpeng/DEG_Prediction_PKC.git  
+   cd DEG_Prediction_PKC
