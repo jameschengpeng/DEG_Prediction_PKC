@@ -73,7 +73,7 @@ pip install -r requirements.txt
 Choose from recommended sources:
 - **Zhang et al. Brain Cell Atlas**: https://www.brainrnaseq.org/
 - **GTEx Portal**: https://gtexportal.org/
-- **Allen Brain Atlas**: https://portal.brain-map.org/
+- **Allen Brain Atlas**: https://portal.brain-map.org/](https://portal.brain-map.org/atlases-and-data/rnaseq
 - **Single-cell RNA-seq databases** with astrocyte populations
 
 Save to: `D:\DEG_Prediction_PKC\data\raw\`
