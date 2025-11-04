@@ -8,7 +8,7 @@ This repository supports the analysis of predicted gene expression changes (“D
 
 ## Dataset sources  
 1. Proxy PKC inhibition dataset: GSE43217 (human HT1080 cells, PKC inhibitor + stimulation)  
-2. Baseline astrocyte expression data: [insert link once selected]  
+2. Baseline astrocyte expression data: https://portal.brain-map.org/atlases-and-data/rnaseq
 3. Optional: other knockdown/knockout datasets for PRKCA/PRKCB from ENCODE/KnockTF if found.
 
 ## Workflow  
@@ -73,7 +73,7 @@ pip install -r requirements.txt
 Choose from recommended sources:
 - **Zhang et al. Brain Cell Atlas**: https://www.brainrnaseq.org/
 - **GTEx Portal**: https://gtexportal.org/
-- **Allen Brain Atlas**: https://portal.brain-map.org/](https://portal.brain-map.org/atlases-and-data/rnaseq
+- **Allen Brain Atlas**: https://portal.brain-map.org/atlases-and-data/rnaseq
 - **Single-cell RNA-seq databases** with astrocyte populations
 
 Save to: `D:\DEG_Prediction_PKC\data\raw\`
